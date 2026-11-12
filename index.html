@@ -80,9 +80,50 @@ select{background:var(--surface);color:var(--ink);border:1px solid var(--line);b
 @media (max-width:700px){.controls{position:static}}
 @media (max-width:700px){.controls{position:static}}
 @media (max-width:560px){h1{font-size:19px}.big{font-size:23px}.seg button{padding:6px 8px;font-size:12px}}
+/* 浮水印：螢幕、截圖、列印都會出現 */
+.wm{position:fixed;inset:0;pointer-events:none;z-index:9999;background-repeat:repeat;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media print{.wm{position:fixed;display:block!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+/* 登入畫面 */
+body.locked .wrap{display:none}
+#login{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;background:var(--bg);padding:20px}
+body.locked #login{display:flex}
+.lg-box{width:100%;max-width:340px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
+.lg-box h1{font-size:20px;margin:4px 0 4px}
+.lg-box label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin:14px 0 5px}
+.lg-box input{width:100%;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;font-size:16px}
+.lg-box button{width:100%;margin-top:18px;background:var(--gold);color:#1b1404;border:0;border-radius:10px;padding:12px;font:inherit;font-size:16px;font-weight:900;cursor:pointer}
+.lg-err{color:var(--bad);font-size:13px;margin-top:10px;min-height:18px}
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="wm" id="wm" aria-hidden="true"></div>
+<div id="login">
+  <form class="lg-box" id="lgForm" autocomplete="off">
+    <div class="eyebrow">RETIREMENT FUNDING COMPARISON</div>
+    <h1>退休資金方案評比</h1>
+    <div class="sub">請輸入帳號密碼查看</div>
+    <label for="lgU">帳號</label><input id="lgU" autocapitalize="characters" autocorrect="off" spellcheck="false">
+    <label for="lgP">密碼</label><input id="lgP" type="password">
+    <button type="submit">登入</button>
+    <div class="lg-err" id="lgErr"></div>
+  </form>
+</div>
+<script>
+(function(){
+  const t='RFC財務規劃師陳思穎';
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='300' height='190'><text x='150' y='100' text-anchor='middle' transform='rotate(-28 150 95)' font-family='-apple-system,PingFang TC,Microsoft JhengHei,sans-serif' font-size='17' font-weight='700' fill='rgba(217,178,90,0.16)'>${t}</text></svg>`;
+  document.getElementById('wm').style.backgroundImage=`url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+  const H=s=>{let a=2166136261>>>0;for(const ch of s){a^=ch.codePointAt(0);a=Math.imul(a,16777619)>>>0;}return a.toString(16);};
+  const KEY='38237a69';
+  const unlock=()=>{document.body.classList.remove('locked');window.dispatchEvent(new Event('resize'));};
+  try{ if(sessionStorage.getItem('rpc_ok')===KEY) unlock(); }catch(e){}
+  document.getElementById('lgForm').addEventListener('submit',e=>{e.preventDefault();
+    const u=document.getElementById('lgU').value.trim().toUpperCase(), p=document.getElementById('lgP').value.trim().toUpperCase();
+    if(H(u+'|'+p)===KEY){ try{sessionStorage.setItem('rpc_ok',KEY);}catch(e){} unlock(); }
+    else document.getElementById('lgErr').textContent='帳號或密碼錯誤，請再試一次。';
+  });
+})();
+</script>
 <div class="wrap">
 <header>
   <div class="eyebrow">RETIREMENT FUNDING COMPARISON</div>
@@ -91,7 +132,7 @@ select{background:var(--surface);color:var(--ink);border:1px solid var(--line);b
   <div class="chips">
     <span class="chip">匯率 <b>1 美元 = 31 台幣</b></span>
     <span class="chip">富邦/安聯投資型保單 <b>年化 5%</b></span>
-    <span class="chip">ETF <b>樂觀 7%／保守 5%</b></span>
+    <span class="chip">ETF <b>保守 5%</b></span>
     <span class="chip">分紅保單 <b>建議書「假設中分紅」</b></span>
     <span class="chip">提領 <b>每年美元・不隨通膨調整</b></span>
   </div>
@@ -112,6 +153,7 @@ select{background:var(--surface);color:var(--ink);border:1px solid var(--line);b
     <div class="ctl xopt copt"><label>週期</label><div class="seg" id="segP"></div></div>
     <div class="ctl xopt"><label>大跌發生在</label><div class="seg" id="segF"></div></div>
     <div class="ctl"><label>方案六 ETF 報酬</label><div class="seg" id="segE"></div></div>
+    <div class="ctl"><label>方案四 享利雙收發放的現金</label><div class="seg" id="segCB"></div></div>
   </div>
 </div>
 
@@ -154,16 +196,14 @@ select{background:var(--surface);color:var(--ink);border:1px solid var(--line);b
 <div class="panel">
   <div class="legend" id="legend"></div>
   <div class="chart-box"><canvas id="chart"></canvas><div class="tip" id="tip"></div></div>
-  <div class="sub" style="margin-top:6px">金色虛線＝退休年齡。資產歸零的那一年即為「領不足額」的年齡。</div>
+  <div class="sub" style="margin-top:6px">金色虛線＝退休年齡。資產歸零的那一年即為「領不足額」的年齡。圖上顯示到 90 歲；方案一預設隱藏（點上方圖例可顯示或隱藏任一方案）。</div>
 </div>
 
 <h2>逐年現金流明細</h2>
 <div style="margin-bottom:8px"><select id="planSel"></select></div>
 <div class="tbl-wrap" style="max-height:460px;overflow:auto"><table id="detail"></table></div>
+<div class="sub" style="margin-top:6px" id="detailNote"></div>
 
-<h2>各方案的繳費資金來源（台幣）</h2>
-<div class="tbl-wrap"><table id="fund"></table></div>
-<div class="sub" style="margin-top:6px" id="fundSub"></div>
 
 <h2>試算假設與注意事項</h2>
 <div class="panel note">
@@ -174,9 +214,12 @@ select{background:var(--surface);color:var(--ink);border:1px solid var(--line);b
   <li><b>保單提領方式</b>：以部分解約計算。每次提領會依「提領金額 ÷ 當時解約金」的比例縮小保單，之後各年度價值按縮小後的比例接續建議書成長。實際以保險公司部分解約、減額的試算為準。</li>
   <li><b>時間點</b>：每列年齡依建議書標示（第 1 年＝50 歲）。保費於年初繳納，提領於該年度末進行，因此「55 歲退休」是在保單第 6 年末開始提領。</li>
   <li><b>計算範圍</b>：「含投資型保單」會把富邦、安聯剩下的餘額（年化 5%）一起用來支應提領，並與主方案按比例同時提領；「只看主方案」只用該方案本身。</li>
-  <li><b>投入金額不同</b>：方案二只動用存款 30 萬，方案三、四動用存款 100 萬，方案五總保費約 130 萬，所以「含投資型保單」的比較會受投入多寡影響。要公平比較商品效率，請看「每 100 萬可支撐年提領」一欄。</li>
+  <li><b>投入金額不同</b>：方案二、四、五只動用存款 30 萬，方案三動用存款 100 萬，所以「含投資型保單」的比較會受投入多寡影響。要公平比較商品效率，請看「每 100 萬可支撐年提領」一欄。</li>
   <li><b>ETF 報酬是平均值</b>：實際每年漲跌不一，退休初期若遇大跌（報酬順序風險），可支撐年限會比試算短。分紅保單價值較平穩，另附身故保障（本表未計入）。</li>
-  <li><b>景氣循環大跌（壓力測試）</b>：開啟後，從「第一次大跌」那年起，每隔 8 或 10 年跌一次。第一次大跌之前照平均報酬計算；之後每個循環＝大跌那年＋接下來的回升年，回升年的報酬調高，讓每個循環的平均仍等於設定值（ETF 7%／5%、投資型保單 5%）。所以和「每年平均」相比，差別純粹來自漲跌的順序。ETF 和富邦、安聯的投資型保單都會跟著跌；分紅保單依建議書數字不受影響。實際上分紅保單的紅利也非保證，市場長期不好時，保險公司可能調降紅利。</li>
+  <li><b>景氣循環大跌（壓力測試）</b>：開啟後，從「第一次大跌」那年起，每隔 8 或 10 年跌一次。第一次大跌之前照平均報酬計算；之後每個循環＝大跌那年＋接下來的回升年，回升年的報酬調高，讓每個循環的平均仍等於設定值（ETF 5%、方案六 ETF 依設定、投資型保單 5%）。所以和「每年平均」相比，差別純粹來自漲跌的順序。ETF 和富邦、安聯的投資型保單都會跟著跌；分紅保單依建議書數字不受影響。實際上分紅保單的紅利也非保證，市場長期不好時，保險公司可能調降紅利。</li>
+  <li><b>方案四 享利雙收（台幣）</b>：保誠享利雙收終身保險(113)(定期給付型)，女 50 歲，年繳 30 萬（表訂 303,030）× 3 年，保額 42,983。保單價值取「解約金＋長青解約紅利（B+G）」；每年發放的「生存保險金＋年度紅利（C+E，約 1.9～2 萬）」視為現金，可選擇放定存（台銀一年期定儲約 1.7%）或 ETF（5%）滾存，一起計入資產並可用來提領。</li>
+  <li><b>方案五 鑫滿康安（台幣）</b>：保誠鑫滿康安終身壽險(定期給付型)，女 50 歲，年繳 30 萬（表訂 303,030）× 3 年，保額 1,044,572，取「可領取解約金總和（B+D）」。</li>
+  <li><b>方案四、五的資金來源</b>：同方案二，第 1 年富邦 20 萬＋安聯 10 萬，第 2、3 年存款 15 萬＋安聯 15 萬。台幣金額以 1:31 換算成美元顯示。兩份建議書目前只拿到第 35 年（84 歲），85 歲以後依第 34→35 年的成長率推估（享利雙收約 +0.25%／年、鑫滿康安約 +2.3%／年），待補齊建議書後替換。</li>
   <li><b>方案六的提領順序</b>：平常從 ETF 和投資型保單領；大跌當年和隔年改從分紅保單領，保單領完才回頭領 ETF。</li>
   <li><b>匯率</b>：全程以 1:31 換算；美元保單與台幣資產之間的匯差未計入。本週台幣一度貶到約 32.8，美元保單以台幣計價反而增值。</li>
 </ul>
@@ -193,13 +236,22 @@ const CF5000 = [1791,4822,8071,12111,17633,30046,30972,31913,32919,34092,35275,3
 const CF7000 = [2507,6750,11298,16955,24688,42060,43358,44675,46083,47724,49380,51273,53232,55267,57359,59531,61868,64285,66808,69418,71979,74627,77342,80149,83034,86004,89065,92206,95432,98750,102160,105642,109244,112962,116844,120874,125047,129396,133919,138619,143500,148574,153846,159333,165041,170966,177142,183557,190242,197207,204450,211986,219813,227978,236493,245360,254582,264190,274216,284660];
 const MD10000 = [4338,10161,16133,17559,20173,34344,35558,36894,38639,40292,41844,43491,45347,47158,49043,52845,54985,57433,59702,62111,64657,67233,69912,72702,75611,78635,81790,85055,88494,92071,95820,99669,103688,108024,112576,117303,122243,127181,132481,137896,143456,149819,156936,164475,172579,179622,187184,194845,203538,213766];
 
+// 台幣保單（新臺幣），第1年=50歲；建議書只到第 35 年（84 歲），之後依最後一年成長率推估（待補建議書後替換）
+const XLSS_TWD = [124548,289615,471627,502480,531412,823189,826193,861478,864874,867233,901315,902948,904539,906125,909993,911837,913728,915530,917420,919222,921199,923387,925536,927681,928922,930900,932830,935967,937897,939742,941590,944036,946524,948974,951335];   // 享利雙收：解約金＋長青解約紅利 B+G
+const XLSS_CASH = [6233,12465,18698,19257,19300,19257,19343,19429,19472,19429,19472,19472,19515,19515,19558,19558,19558,19558,19558,19558,19558,19515,19558,19558,19558,19558,19601,19601,19644,19644,19644,19601,19644,19687,19687];  // 享利雙收：每年發放 生存保險金＋年度紅利 C+E（現金給付）
+const MKAK_TWD = [123155,284959,448748,484159,551012,999551,1022949,1044781,1068180,1091265,1114872,1139106,1167831,1192275,1219016,1246593,1274796,1303835,1333605,1364211,1395548,1427930,1460938,1494886,1529880,1565709,1602582,1640396,1679462,1719470,1760522,1802617,1846177,1890780,1933711];   // 鑫滿康安：可領取解約金總和 B+D
+function extend(a,n){ const g=a[a.length-1]/a[a.length-2]; const out=a.slice(); while(out.length<n) out.push(Math.round(out[out.length-1]*g)); return out; }
+const XLSS = extend(XLSS_TWD,60).map(v=>v/FX), MKAK = extend(MKAK_TWD,60).map(v=>v/FX);
+const XLSS_PAY = XLSS_CASH.concat(Array(25).fill(XLSS_CASH[XLSS_CASH.length-1]));
+const DATA_YEARS = 35;
+
 const INV_R = 0.05;
 const FUBON0 = 200000, ALLIANZ0 = 460000;
 const START_AGE = 50, END_AGE = 100;
 const ETF_BUY6 = 155000; // 方案六：保單繳完後每年 5,000 美元買 ETF
 
 // 情境（由介面設定）mode: off=每年平均 / cycle=週期大跌 / hist=歷史重演
-const SCN = { mode:'off', cycle:false, drop:0.40, period:10, first:50, invCrash:true, r6:0.07, hist:'h2008' };
+const SCN = { cbr:0.017, mode:'off', cycle:false, drop:0.40, period:10, first:50, invCrash:true, r6:0.07, hist:'h2008' };
 
 // 0050 含息年度總報酬（havocfuture.tw 還原股價統計）
 const HIST = {2008:-0.4332,2009:0.75,2010:0.1313,2011:-0.1581,2012:0.1192,2013:0.1168,2014:0.1666,2015:-0.0628,2016:0.1965,2017:0.1814,2018:-0.0494,2019:0.3352,2020:0.3114,2021:0.2192,2022:-0.2137,2023:0.2745,2024:0.4864,2025:0.3686};
@@ -239,13 +291,14 @@ const PLANS = [
   { id:'p2', name:'方案二', title:'鑫美達 3年 × 10,000', policy:MD10000, wd:'prop',
     src:(k)=> k===1 ? {fubon:200000, allianz:110000, savings:0, etfBuy:0}
                     : k<=3 ? {fubon:0, allianz:160000, savings:150000, etfBuy:0} : none },
-  { id:'p3', name:'方案三', title:'ETF 樂觀 7%', r:()=>0.07, wd:'prop',
+  { id:'p4', name:'方案三', title:'ETF 保守 5%', r:()=>0.05, wd:'prop',
     src:(k)=> k<=6 ? {fubon:0, allianz:0, savings:1000000/6, etfBuy:1000000/6} : none },
-  { id:'p4', name:'方案四', title:'ETF 保守 5%', r:()=>0.05, wd:'prop',
-    src:(k)=> k<=6 ? {fubon:0, allianz:0, savings:1000000/6, etfBuy:1000000/6} : none },
-  { id:'p5', name:'方案五', title:'鑫傳富 6年 × 7,000', policy:CF7000, wd:'prop',
-    src:(k)=> k===1 ? {fubon:150000, allianz:67000, savings:0, etfBuy:0}
-                    : k<=6 ? {fubon:0, allianz:67000, savings:150000, etfBuy:0} : none },
+  { id:'p7', name:'方案四', title:'享利雙收 3年 × 30萬（台幣）', policy:XLSS, payout:XLSS_PAY, wd:'prop',
+    src:(k)=> k===1 ? {fubon:200000, allianz:100000, savings:0, etfBuy:0}
+                    : k<=3 ? {fubon:0, allianz:150000, savings:150000, etfBuy:0} : none },
+  { id:'p8', name:'方案五', title:'鑫滿康安 3年 × 30萬（台幣）', policy:MKAK, wd:'prop',
+    src:(k)=> k===1 ? {fubon:200000, allianz:100000, savings:0, etfBuy:0}
+                    : k<=3 ? {fubon:0, allianz:150000, savings:150000, etfBuy:0} : none },
   { id:'p6a', name:'方案六A', title:'鑫傳富 5,000×6年 ＋ ETF', policy:CF5000, r:()=>SCN.r6, wd:'bucket', combo:true,
     src:(k,R)=>{ const age=49+k;
       if (k===1) return {fubon:150000, allianz:5000, savings:0, etfBuy:0};
@@ -268,8 +321,8 @@ function wdAmount(scheme, R, age, flat){
 
 // mode: 'all' = 主方案 + 富邦/安聯 ; 'core' = 只看主方案（保單＋ETF）
 function simulate(plan, R, scheme, mode='all', flat=3000){
-  let f = 1, fubon = FUBON0, allianz = ALLIANZ0, etf = 0;
-  let savingsUsed = 0, principalTWD = 0, depletedAge = null, totalWd = 0;
+  let f = 1, fubon = FUBON0, allianz = ALLIANZ0, etf = 0, cb = 0;   // cb：享利雙收發放的現金，滾存（定存或 ETF）
+  let savingsUsed = 0, principalTWD = 0, depletedAge = null, totalWd = 0, wdCore = 0, prinUSD = 0;
   const rows = [];
   const vals = plan.policy;
   const pvAt = k => vals ? vals[Math.min(k, vals.length)-1]*f : 0;
@@ -278,22 +331,23 @@ function simulate(plan, R, scheme, mode='all', flat=3000){
     const s = plan.src(k, R);
     fubon -= s.fubon; allianz -= s.allianz; savingsUsed += s.savings; etf += s.etfBuy;
     const contrib = s.fubon + s.allianz + s.savings;
-    principalTWD += contrib;
+    principalTWD += contrib; prinUSD += contrib/FX;
     const ri = yearRet(INV_R, age, SCN.invCrash);
     fubon *= 1+ri; allianz *= 1+ri;
     if (plan.r) etf *= 1 + yearRet(plan.r(), age, true);
+    if (plan.payout){ const rc = SCN.cbr>=0.05 ? yearRet(SCN.cbr, age, true) : SCN.cbr; cb = cb*(1+rc) + plan.payout[Math.min(k,plan.payout.length)-1]*f/FX; }
 
     let wd = 0, wdFrom = '';
     if (age >= R && depletedAge===null){
       const W = wdAmount(scheme, R, age, flat);
       const pv = pvAt(k);
       const side = mode==='all' ? (fubon+allianz)/FX : 0;
-      const mkt = etf/FX + side;                    // 市場型資產
+      const mkt = etf/FX + side + cb;               // 市場型資產（含享利雙收累積現金）
       const pool = pv + mkt;
-      const takeMkt = amt => { if (amt<=0||mkt<=0) return; const q=1-amt/mkt; etf*=q; if(mode==='all'){fubon*=q;allianz*=q;} };
-      const takePol = amt => { if (amt<=0||pv<=0) return; f *= (1-amt/pv); };
+      const takeMkt = amt => { if (amt<=0||mkt<=0) return; wdCore += amt*(etf/FX+cb)/mkt; const q=1-amt/mkt; etf*=q; cb*=q; if(mode==='all'){fubon*=q;allianz*=q;} };
+      const takePol = amt => { if (amt<=0||pv<=0) return; wdCore += amt; f *= (1-amt/pv); };
       if (pool < W - 0.01){
-        wd = Math.max(pool,0); f=0; etf=0; if(mode==='all'){fubon=0;allianz=0;}
+        wd = Math.max(pool,0); wdCore += pv + etf/FX + cb; f=0; etf=0; cb=0; if(mode==='all'){fubon=0;allianz=0;}
         depletedAge = age; wdFrom='不足額';
       } else if (plan.wd==='prop'){
         const q = W/pool; takePol(pv*q); takeMkt(mkt*q); wd=W;
@@ -308,8 +362,8 @@ function simulate(plan, R, scheme, mode='all', flat=3000){
     const pvAfter = pvAt(k);
     const etfUSD = etf/FX, sideUSD = (fubon+allianz)/FX;
     rows.push({ age, k, mret: plan.r ? yearRet(plan.r(), age, true) : yearRet(INV_R, age, SCN.invCrash), contribTWD:contrib, etfBuy:s.etfBuy, wd, wdFrom, crash:isCrash(age),
-      pol:pvAfter, etf:etfUSD, side:sideUSD,
-      total: pvAfter + etfUSD + (mode==='all' ? sideUSD : 0) });
+      pol:pvAfter, etf:etfUSD, side:sideUSD, cash:cb, prin:prinUSD, roi: prinUSD>0 ? (pvAfter+etfUSD+cb+wdCore)/prinUSD : null,
+      total: pvAfter + etfUSD + cb + (mode==='all' ? sideUSD : 0) });
   }
   return { rows, depletedAge, endBalance: rows[rows.length-1].total, totalWd, savingsUsed, principalTWD };
 }
@@ -318,9 +372,9 @@ function simulate(plan, R, scheme, mode='all', flat=3000){
 
 
 
-const COLORS={p1:'#B88A22',p2:'#3F8AD6',p3:'#22A889',p4:'#9C74DE',p5:'#D46A3A',p6a:'#D45A8A',p6b:'#2EA3B8'};
+const COLORS={p1:'#B88A22',p2:'#3F8AD6',p3:'#22A889',p4:'#9C74DE',p5:'#D46A3A',p6a:'#D45A8A',p6b:'#2EA3B8',p7:'#22A889',p8:'#D46A3A'};
 const SCHEME_LABEL={step:'依年齡調高（3千→60歲4千→65歲5千）',fixed:'依退休年齡固定',flat:'固定每年 3,000'};
-const state={R:55,S:'step',M:'all',T:90,C:'USD',X:'hist',H:'h2008',D:0.4,P:10,F:'R',E:0.07};
+const state={R:55,S:'step',M:'all',T:85,C:'USD',X:'hist',H:'h2008',D:0.4,P:10,F:'R',E:0.07,CB:0.017};
 
 function seg(id,opts,key){
   const el=document.getElementById(id);
@@ -330,7 +384,7 @@ function seg(id,opts,key){
 seg('segR',[[55,'55 歲'],[60,'60 歲'],[65,'65 歲']],'R');
 seg('segS',[['step','逐步調高'],['fixed','依退休年齡'],['flat','固定 3,000']],'S');
 seg('segM',[['all','含投資型保單'],['core','只看主方案']],'M');
-seg('segT',[[85,'85'],[90,'90'],[95,'95'],[100,'100']],'T');
+seg('segT',[[75,'75'],[80,'80'],[85,'85']],'T');
 seg('segC',[['USD','美元'],['TWD','台幣']],'C');
 seg('segX',[['off','每年平均'],['hist','歷史重演'],['cycle','週期大跌']],'X');
 (function(){const el=document.getElementById('selH');el.innerHTML=Object.entries(HISTS).map(([k,v])=>`<option value="${k}">${v.short}</option>`).join('');el.onchange=()=>{state.H=el.value;render();};})();
@@ -338,6 +392,7 @@ seg('segD',[[0.3,'-30%'],[0.4,'-40%'],[0.5,'-50%']],'D');
 seg('segP',[[8,'每 8 年'],[10,'每 10 年']],'P');
 seg('segF',[[50,'50歲(現在)'],['R','退休當年'],[55,'55歲'],[60,'60歲'],[65,'65歲']],'F');
 seg('segE',[[0.07,'7%'],[0.05,'5%']],'E');
+seg('segCB',[[0.017,'放定存 1.7%'],[0.05,'放 ETF 5%']],'CB');
 
 const cur=v=> state.C==='USD' ? '$'+Math.round(v).toLocaleString() : 'NT$'+Math.round(v*FX/10000).toLocaleString()+'萬';
 const curTWD=v=> 'NT$'+(Math.round(v/1000)/10).toLocaleString()+'萬';
@@ -353,12 +408,12 @@ const lastAgeText=r=> r.depletedAge===null ? '100+' : String(r.depletedAge-1);
 const lastAgeNum=r=> r.depletedAge===null ? 101 : r.depletedAge-1;
 
 function render(){
-  Object.assign(SCN,{mode:state.X,cycle:state.X!=='off',hist:state.H,drop:state.D,period:state.P,first:state.F==='R'?state.R:state.F,r6:state.E});
+  Object.assign(SCN,{mode:state.X,cycle:state.X!=='off',hist:state.H,drop:state.D,period:state.P,first:state.F==='R'?state.R:state.F,r6:state.E,cbr:state.CB});
   document.querySelectorAll('.xopt').forEach(e=>e.style.display=state.X==='off'?'none':'');
   document.querySelectorAll('.copt').forEach(e=>e.style.display=state.X==='cycle'?'':'none');
   document.querySelectorAll('.hopt').forEach(e=>e.style.display=state.X==='hist'?'':'none');
   document.getElementById('selH').value=state.H;
-  for(const [id,key] of [['segR','R'],['segS','S'],['segM','M'],['segT','T'],['segC','C'],['segX','X'],['segD','D'],['segP','P'],['segF','F'],['segE','E']])
+  for(const [id,key] of [['segR','R'],['segS','S'],['segM','M'],['segT','T'],['segC','C'],['segX','X'],['segD','D'],['segP','P'],['segF','F'],['segE','E'],['segCB','CB']])
     document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',String(state[key])===b.dataset.v));
   const {R,S,M,T}=state;
   const res=PLANS.map(p=>({p,r:simulate(p,R,S,M),fb:simulate(p,R,'flat',M,3000),mx:maxFlatT(p,R,M,T)}));
@@ -411,7 +466,6 @@ function render(){
   insight(res);
   drawChart(res);
   renderDetail();
-  renderFund();
 }
 
 function insight(res){
@@ -430,7 +484,7 @@ function insight(res){
   const nr7=(normalRet(0.07)*100).toFixed(1), nr5=(normalRet(0.05)*100).toFixed(1);
   const t=v=>v>100?'100+':v;
   const histLi = SCN.mode==='hist' ? `<li><b>歷史重演：${HISTS[SCN.hist].label}</b>，發生在 ${SCN.first} 歲（${state.F==='R'?'剛退休那一年':'指定年齡'}）。富邦／安聯投資型保單也一起套用同樣的漲跌。和每年平均成長比，可以領到的年齡變化：${PLANS.map(p=>`${p.name} ${t(smooth[p.id])}→${t(lastAgeNum(res.find(x=>x.p.id===p.id).r))}`).join('；')} 歲。</li><li>完整比較請看下方「股災壓力測試」表格。</li>` : '';
-  const crashLi = SCN.mode==='cycle' ? `<li><b>景氣循環大跌開啟</b>：${crashAges.join('、')} 歲各跌 ${Math.round(SCN.drop*100)}%。為了讓長期平均仍是 7%／5%，其他年份要漲 ${nr7}%／${nr5}%（波動大，但平均不變）。和每年平均成長比：${PLANS.map(p=>`${p.name} ${t(smooth[p.id])}→${t(lastAgeNum(res.find(x=>x.p.id===p.id).r))}`).join('；')} 歲。</li>
+  const crashLi = SCN.mode==='cycle' ? `<li><b>景氣循環大跌開啟</b>：${crashAges.join('、')} 歲各跌 ${Math.round(SCN.drop*100)}%。為了讓長期平均不變，ETF 5% 的其他年份要漲 ${nr5}%（波動大，但平均不變）。和每年平均成長比：${PLANS.map(p=>`${p.name} ${t(smooth[p.id])}→${t(lastAgeNum(res.find(x=>x.p.id===p.id).r))}`).join('；')} 歲。</li>
    <li>重點在<b>大跌發生的時間點</b>：退休前（還在投入）遇到大跌，等於用便宜價格買進，結果反而可能更好；剛退休、一邊領錢一邊下跌，傷害最大。可以把「第一次大跌」切到「退休當年」看看差別。</li>` : (SCN.mode==='off'?`<li>目前是「每年平均報酬」的算法，沒有考慮市場起伏。把上方「市場情境」切到「歷史重演」，可以看退休遇到金融海嘯時的結果。</li>`:'');
   document.getElementById('insight').innerHTML=`
   <b>${R} 歲退休、${SCHEME_LABEL[S]}、${M==='all'?'含投資型保單':'只看主方案'}：</b>
@@ -440,8 +494,8 @@ function insight(res){
    ${histLi}${crashLi}
    <li>方案六（保單＋ETF）：平常從 ETF／投資型保單領，<b>大跌當年和隔年改從保單領</b>，讓 ETF 有時間回升，不必在低點賣出。55 歲退休時，方案六A 還來不及買 ETF（結果同方案一），方案六B 只買了 2 年；60 歲以後退休才看得出搭配的效果。</li>
    <li>延後退休的效果（固定每年 3,000）：${d55.map(([p,a,b])=>`${p.name} ${t(a)}→${t(b)} 歲`).join('；')}（55 歲退休 → 65 歲退休）。</li>
-   ${M==='all'?'<li>注意：「含投資型保單」時，各方案動用的存款不同（方案二 30 萬、方案一和五 75 萬、方案三和四 100 萬、方案六依退休年齡最多再加 60～110 萬），投入多的方案自然撐得久。要比較商品本身的效率，請切到「只看主方案」，看「每 100 萬可支撐年領」。</li>':''}
-   <li>商品本身的長期內部報酬率約為：鑫美達 3.9%、鑫傳富 3.2%（第 36 年，假設中分紅）。兩者都低於 ETF 的假設報酬，但價值平穩，建議書 B 欄解約金是保證的，並附身故保障。</li>
+   ${M==='all'?'<li>注意：「含投資型保單」時，各方案動用的存款不同（方案二、四、五 30 萬、方案一 75 萬、方案三 100 萬、方案六依退休年齡最多再加 60～110 萬），投入多的方案自然撐得久。要比較商品本身的效率，請切到「只看主方案」，看「每 100 萬可支撐年領」。</li>':''}
+   <li>商品本身的長期內部報酬率約為：鑫美達 3.9%、鑫傳富 3.2%（第 36 年，假設中分紅）；台幣的鑫滿康安約 2.3%、享利雙收約 2.3%（含每年發放的現金，但不含現金再滾存，第 35 年）。兩者都低於 ETF 的假設報酬，但價值平穩，建議書 B 欄解約金是保證的，並附身故保障。</li>
   </ul>`;
 }
 
@@ -474,7 +528,7 @@ function renderStress(){
 }
 
 // ---- chart (canvas, no CDN) ----
-let chartData=null; const hidden=new Set();
+let chartData=null; const hidden=new Set(['p1']);   // 方案一預設不畫（線太多），點圖例可再顯示
 function drawChart(res){
   const cv=document.getElementById('chart'), box=cv.parentElement;
   const dpr=window.devicePixelRatio||1, W=box.clientWidth, H=box.clientHeight;
@@ -483,22 +537,22 @@ function drawChart(res){
   const pad={l:56,r:12,t:10,b:28};
   const k=state.C==='USD'?1:FX;
   const vis=res.filter(x=>!hidden.has(x.p.id));
-  const maxV=Math.max(1,...vis.flatMap(x=>x.r.rows.map(z=>z.total)))*k*1.05;
-  const X=a=>pad.l+(a-50)/(100-50)*(W-pad.l-pad.r);
+  const maxV=Math.max(1,...vis.flatMap(x=>x.r.rows.filter(z=>z.age<=90).map(z=>z.total)))*k*1.05;
+  const X=a=>pad.l+(a-50)/(90-50)*(W-pad.l-pad.r);
   const Y=v=>pad.t+(1-v/maxV)*(H-pad.t-pad.b);
   // crash bands
   if(SCN.mode!=='off'){ctx.fillStyle='rgba(228,106,122,.22)';
-    for(let a=50;a<=100;a++) if(isCrash(a)){const x0=X(a-0.5),x1=X(a+0.5);ctx.fillRect(Math.max(x0,pad.l),pad.t,x1-x0,H-pad.t-pad.b);}}
+    for(let a=50;a<=90;a++) if(isCrash(a)){const x0=X(a-0.5),x1=X(a+0.5);ctx.fillRect(Math.max(x0,pad.l),pad.t,x1-x0,H-pad.t-pad.b);}}
   ctx.font='11px -apple-system,sans-serif'; ctx.fillStyle='#7f92ad'; ctx.strokeStyle='#22385a'; ctx.lineWidth=1;
   const step=niceStep(maxV/5);
   for(let v=0;v<=maxV;v+=step){ctx.beginPath();ctx.moveTo(pad.l,Y(v));ctx.lineTo(W-pad.r,Y(v));ctx.stroke();
     ctx.textAlign='right';ctx.fillText(state.C==='USD'?(v>=1000?Math.round(v/1000)+'K':v):Math.round(v/10000)+'萬',pad.l-6,Y(v)+4);}
   ctx.textAlign='center';
-  for(let a=50;a<=100;a+=(W<600?10:5)) ctx.fillText(a+'歲',X(a),H-8);
+  for(let a=50;a<=90;a+=(W<600?10:5)) ctx.fillText(a+'歲',X(a),H-8);
   ctx.setLineDash([4,4]);ctx.strokeStyle='#d9b25a';ctx.beginPath();ctx.moveTo(X(state.R),pad.t);ctx.lineTo(X(state.R),H-pad.b);ctx.stroke();
   for(const {p,r} of vis){
     ctx.strokeStyle=COLORS[p.id];ctx.lineWidth=2;ctx.setLineDash(p.combo?[7,4]:[]);ctx.beginPath();
-    r.rows.forEach((z,i)=>{const x=X(z.age),y=Y(z.total*k);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+    r.rows.filter(z=>z.age<=90).forEach((z,i)=>{const x=X(z.age),y=Y(z.total*k);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
   }
   ctx.setLineDash([]);
   chartData={res:vis,X,Y,k,pad,W,H};
@@ -513,7 +567,7 @@ function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x)));const n=x/p;
     if(!chartData)return;const rect=cv.getBoundingClientRect();
     const cx=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
     const {X,pad,W,res}=chartData;
-    let age=Math.round(50+(cx-pad.l)/(W-pad.l-pad.r)*50);age=Math.max(50,Math.min(100,age));
+    let age=Math.round(50+(cx-pad.l)/(W-pad.l-pad.r)*40);age=Math.max(50,Math.min(90,age));
     const rows=res.map(({p,r})=>[p,r.rows.find(z=>z.age===age)]).sort((a,b)=>b[1].total-a[1].total);
     tip.innerHTML=`<div class="h">${age} 歲${isCrash(age)?' <span class="no">大跌年</span>':''}</div>`+rows.map(([p,z])=>`<div class="r"><span><span class="dot" style="background:${COLORS[p.id]}"></span>${p.name}</span><b>${cur(z.total)}</b></div>`).join('');
     tip.style.display='block';
@@ -530,14 +584,19 @@ sel.onchange=renderDetail;
 function renderDetail(){
   const p=PLANS.find(x=>x.id===sel.value);
   const r=simulate(p,state.R,state.S,state.M);
-  const hasPol=!!p.policy, hasEtf=!!p.r;
-  let h=`<tr><th>年齡</th><th>當年投入<br>(台幣)</th><th>提領</th>${p.combo?'<th>提領來源</th>':''}${hasPol?'<th>保單解約金</th>':''}${hasEtf?'<th>ETF 市值</th>':''}${state.M==='all'?'<th>富邦+安聯</th>':''}<th>總資產</th></tr>`;
+  const hasPol=!!p.policy, hasEtf=!!p.r, hasCash=!!p.payout;
+  const twd = ['p7','p8'].includes(p.id);   // 台幣保單以台幣顯示，其餘以美元顯示
+  const cc = v => twd ? 'NT$'+Math.round(v*FX).toLocaleString() : '$'+Math.round(v).toLocaleString();
+  const dash='<span class="mut">—</span>';
+  let h=`<tr><th>年齡</th><th>當年投入</th><th>累計投入</th><th>提領</th>${p.combo?'<th>提領來源</th>':''}${hasPol?'<th>保單解約金</th>':''}${hasEtf?'<th>ETF 市值</th>':''}${hasCash?'<th>累積領回現金<br>（滾存）</th>':''}<th>主方案價值</th><th>投資報酬率*</th>${state.M==='all'?'<th>富邦+安聯</th><th>總資產</th>':''}</tr>`;
   for(const z of r.rows){
     const cls=z.age===state.R?'retire':(r.depletedAge===z.age?'dep':'');
-    const dash='<span class="mut">—</span>';
-    h+=`<tr class="${cls}"><td>${z.age}${z.crash?' <span class="no" title="大跌年">▼</span>':''}</td><td>${z.contribTWD?curTWD(z.contribTWD):dash}</td><td>${z.wd?cur(z.wd):dash}</td>${p.combo?`<td style="text-align:left">${z.wdFrom||dash}</td>`:''}${hasPol?`<td>${cur(z.pol)}</td>`:''}${hasEtf?`<td>${cur(z.etf)}</td>`:''}${state.M==='all'?`<td>${cur(z.side)}</td>`:''}<td><b>${cur(z.total)}</b></td></tr>`;
+    const core=z.pol+z.etf+z.cash;
+    const roi=z.roi==null?dash:`<b class="${z.roi>=1?'ok':'no'}">${(z.roi*100).toFixed(1)}%</b>`;
+    h+=`<tr class="${cls}"><td>${z.age}${z.crash?' <span class="no" title="大跌年">▼</span>':''}</td><td>${z.contribTWD?cc(z.contribTWD/FX):dash}</td><td>${cc(z.prin)}</td><td>${z.wd?cc(z.wd):dash}</td>${p.combo?`<td style="text-align:left">${z.wdFrom||dash}</td>`:''}${hasPol?`<td>${cc(z.pol)}</td>`:''}${hasEtf?`<td>${cc(z.etf)}</td>`:''}${hasCash?`<td>${cc(z.cash)}</td>`:''}<td><b>${cc(core)}</b></td><td>${roi}</td>${state.M==='all'?`<td>${cc(z.side)}</td><td>${cc(z.total)}</td>`:''}</tr>`;
   }
   document.getElementById('detail').innerHTML=h;
+  document.getElementById('detailNote').innerHTML=`幣別：${twd?'台幣保單以<b>新臺幣</b>顯示':'美元保單與 ETF 以<b>美元</b>顯示（台幣投入以 1:31 換算）'}。* 投資報酬率＝（主方案價值＋累計從主方案領出的錢）÷ 累計投入。主方案價值＝保單解約金${hasEtf?'＋ETF':''}${hasCash?'＋累積領回現金':''}，不含富邦、安聯。`;
 }
 
 // ---- funding ----
@@ -555,7 +614,7 @@ function renderFund(){
     h+=`<tr><td><b>小計</b></td><td><b>${curTWD(tot.fubon)}</b></td><td><b>${curTWD(tot.allianz)}</b></td><td><b>${curTWD(tot.savings)}</b></td><td></td><td><b>${curTWD(tot.fubon+tot.allianz+tot.savings)}</b></td></tr>`;
   }
   document.getElementById('fund').innerHTML=h;
-  document.getElementById('fundSub').innerHTML=`依目前選的 <b>${R} 歲退休</b>顯示。保費以 1:31 換算：5,000 美元≈15.5 萬、7,000 美元≈21.7 萬、10,000 美元≈31 萬，存款不足的部分從安聯補足。方案三、四的 ETF 由存款分 6 年投入，每年約 16.7 萬。方案六在保單繳完後，每年 15.5 萬（存款 15 萬＋安聯 0.5 萬）買 ETF，買到第 10 年（59 歲），退休當年起停止投入。`;
+  document.getElementById('fundSub').innerHTML=`依目前選的 <b>${R} 歲退休</b>顯示。保費以 1:31 換算：5,000 美元≈15.5 萬、7,000 美元≈21.7 萬、10,000 美元≈31 萬，存款不足的部分從安聯補足。方案三的 ETF 由存款分 6 年投入，每年約 16.7 萬。方案四、五是台幣保單，每年 30 萬。方案六在保單繳完後，每年 15.5 萬（存款 15 萬＋安聯 0.5 萬）買 ETF，買到第 10 年（59 歲），退休當年起停止投入。`;
 }
 
 window.addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(render,150);});
